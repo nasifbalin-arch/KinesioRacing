@@ -13,7 +13,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script>
 window.__FB_CONFIG = {
   apiKey: "AIzaSyCD_TLbYB9b9y8UbRfPfYKLsXdmzjR7kwY",
@@ -830,28 +829,58 @@ function slug(s){
   return (s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"")
     .replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"") || "jugador";
 }
-function pdfShell(title, subtitle, bodyHTML, p){
+function openPrintWindow(title, subtitle, bodyHTML, p){
+  const styleTag = document.querySelector('style') ? document.querySelector('style').outerHTML : "";
   const crestEl = document.querySelector('header.app img');
   const crest = crestEl ? crestEl.src : "";
-  return `<div style="font-family:Helvetica,Arial,sans-serif;color:#1b2733;padding:28px;width:720px;background:#fff;">
-    <div style="display:flex;align-items:center;gap:14px;border-bottom:3px solid #0098d8;padding-bottom:14px;margin-bottom:20px;">
-      ${crest?`<img src="${crest}" style="width:48px;height:48px;flex:none;display:block;">`:""}
-      <div style="flex:1;">
-        <div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#0098d8;font-weight:700;">
-          Racing Club · Departamento de Kinesiología</div>
-        <div style="font-size:21px;font-weight:800;color:#002048;margin-top:2px;line-height:1.1;">${esc(title)}</div>
-        ${subtitle?`<div style="font-size:12px;color:#6b7785;margin-top:3px;">${esc(subtitle)}</div>`:""}
+  const win = window.open("", "_blank");
+  if(!win){ toast('Habilitá las ventanas emergentes para exportar el PDF'); return; }
+  const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<title>${esc(title)}</title>
+${styleTag}
+<style>
+  @page{ size:A4; margin:16mm 12mm; }
+  html,body{ background:#fff; margin:0; }
+  body{ padding:0 0 30px; }
+  .pdf-wrap{ max-width:720px; margin:0 auto; font-family:var(--sans); color:var(--ink); }
+  .pdf-head{ display:flex; align-items:center; gap:14px; border-bottom:3px solid var(--celeste);
+    padding-bottom:14px; margin-bottom:20px; }
+  .pdf-head img{ width:48px; height:48px; flex:none; display:block; }
+  .pdf-eyebrow{ font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--celeste); font-weight:700; }
+  .pdf-title{ font-size:21px; font-weight:800; color:var(--navy); margin-top:2px; line-height:1.1; }
+  .pdf-sub{ font-size:12px; color:var(--muted); margin-top:3px; }
+  .pdf-meta{ text-align:right; font-size:10px; color:var(--muted); flex:none; line-height:1.5; }
+  .pdf-foot{ margin-top:28px; padding-top:10px; border-top:1px solid var(--line); font-size:10px;
+    color:var(--muted); text-align:center; }
+  .log, .rtp, .alerts, .det-alerts { break-inside:avoid; page-break-inside:avoid; }
+  @media print{
+    body{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  }
+</style>
+</head>
+<body>
+  <div class="pdf-wrap">
+    <div class="pdf-head">
+      ${crest?`<img src="${crest}">`:""}
+      <div style="flex:1">
+        <div class="pdf-eyebrow">Racing Club · Departamento de Kinesiología</div>
+        <div class="pdf-title">${esc(title)}</div>
+        ${subtitle?`<div class="pdf-sub">${esc(subtitle)}</div>`:""}
       </div>
-      <div style="text-align:right;font-size:10px;color:#6b7785;flex:none;line-height:1.5;">
+      <div class="pdf-meta">
         <div>Generado: ${fmt(TODAY())}</div>
         ${p&&p.kine?`<div>Kinesiólogo: ${esc(p.kine)}</div>`:""}
       </div>
     </div>
     ${bodyHTML}
-    <div style="margin-top:28px;padding-top:10px;border-top:1px solid #e4e8ee;font-size:10px;color:#6b7785;text-align:center;">
-      Documento interno — Departamento de Kinesiología, Racing Club.
-    </div>
-  </div>`;
+    <div class="pdf-foot">Documento interno — Departamento de Kinesiología, Racing Club.</div>
+  </div>
+</body></html>`;
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  toast('Elegí "Guardar como PDF" en el diálogo de impresión');
+  setTimeout(()=>{ try{ win.focus(); win.print(); }catch(e){} }, 400);
 }
 function pdfRow(label,val){
   if(val===undefined||val===null||val==="") return "";
@@ -911,31 +940,6 @@ function pdfSessionBlock(l){
     ${body}
   </div>`;
 }
-function downloadPDF(html, filename){
-  const holder=document.createElement("div");
-  holder.style.position="absolute"; holder.style.left="0px";
-  holder.style.top=(document.body.scrollHeight+100)+"px";
-  holder.style.background="#fff";
-  document.body.appendChild(holder);
-  holder.innerHTML=html;
-  toast("Generando PDF…");
-  html2pdf().from(holder).set({
-    margin:[14,10,18,10],
-    filename,
-    html2canvas:{scale:2, useCORS:true},
-    jsPDF:{unit:"mm",format:"a4",orientation:"portrait"},
-    pagebreak:{mode:["avoid-all","css","legacy"]}
-  }).toPdf().get('pdf').then(pdf=>{
-    const pages = pdf.internal.getNumberOfPages();
-    const w = pdf.internal.pageSize.getWidth(), h = pdf.internal.pageSize.getHeight();
-    for(let i=1;i<=pages;i++){
-      pdf.setPage(i);
-      pdf.setFontSize(8); pdf.setTextColor(150);
-      pdf.text(`Racing Club · Kinesiología  —  Página ${i} de ${pages}`, w/2, h-7, {align:"center"});
-    }
-  }).save().then(()=>{ holder.remove(); toast("PDF descargado"); })
-    .catch(()=>{ holder.remove(); toast("No se pudo generar el PDF"); });
-}
 function exportPlayerPDF(id){
   const p = state.players.find(x=>x.id===id); if(!p) return;
   const cl = currentLSI(p);
@@ -988,17 +992,14 @@ function exportPlayerPDF(id){
   body += sorted.length ? sorted.map(pdfSessionBlock).join("")
     : `<div style="font-size:12px;color:#6b7785;">Sin registros.</div>`;
 
-  downloadPDF(pdfShell(p.nombre, "Informe de seguimiento kinesiológico", body, p), `informe_${slug(p.nombre)}.pdf`);
+  openPrintWindow(p.nombre, "Informe de seguimiento kinesiológico", body, p);
 }
 function exportSessionPDF(pid,lid){
   const p = state.players.find(x=>x.id===pid); if(!p) return;
   const l = (p.bitacora||[]).find(x=>x.id===lid); if(!l) return;
   const isEval = l.tipoRegistro==="evaluacion";
   const body = pdfSessionBlock(l);
-  downloadPDF(
-    pdfShell(p.nombre, `${isEval?"Evaluación":"Entrenamiento"} · ${fmt(l.fecha)}`, body, p),
-    `${isEval?"evaluacion":"entrenamiento"}_${slug(p.nombre)}_${l.fecha||TODAY()}.pdf`
-  );
+  openPrintWindow(p.nombre, `${isEval?"Evaluación":"Entrenamiento"} · ${fmt(l.fecha)}`, body, p);
 }
 
 /* ---------- export / import ---------- */
