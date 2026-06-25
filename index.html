@@ -825,42 +825,62 @@ function delLog(pid,lid){
 }
 function closeDetail(){ $("#detOverlay").classList.remove("open"); detailId=null; }
 
-/* ---------- export PDF (ficha de jugador / sesión individual) ---------- */
+/* ---------- export PDF (informe de jugador / sesión individual) ---------- */
 function slug(s){
   return (s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"")
     .replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"") || "jugador";
 }
-function pdfShell(title, subtitle, bodyHTML){
-  return `<div style="font-family:Helvetica,Arial,sans-serif;color:#1b2733;padding:26px;width:680px;background:#fff;">
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;
-      border-bottom:3px solid #0098d8;padding-bottom:12px;margin-bottom:18px;">
-      <div>
+function pdfShell(title, subtitle, bodyHTML, p){
+  const crestEl = document.querySelector('header.app img');
+  const crest = crestEl ? crestEl.src : "";
+  return `<div style="font-family:Helvetica,Arial,sans-serif;color:#1b2733;padding:28px;width:720px;background:#fff;">
+    <div style="display:flex;align-items:center;gap:14px;border-bottom:3px solid #0098d8;padding-bottom:14px;margin-bottom:20px;">
+      ${crest?`<img src="${crest}" style="width:48px;height:48px;flex:none;display:block;">`:""}
+      <div style="flex:1;">
         <div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#0098d8;font-weight:700;">
-          Racing Club · Kinesiología</div>
-        <div style="font-size:19px;font-weight:800;color:#002048;margin-top:2px;">${esc(title)}</div>
-        ${subtitle?`<div style="font-size:12px;color:#6b7785;margin-top:2px;">${esc(subtitle)}</div>`:""}
+          Racing Club · Departamento de Kinesiología</div>
+        <div style="font-size:21px;font-weight:800;color:#002048;margin-top:2px;line-height:1.1;">${esc(title)}</div>
+        ${subtitle?`<div style="font-size:12px;color:#6b7785;margin-top:3px;">${esc(subtitle)}</div>`:""}
+      </div>
+      <div style="text-align:right;font-size:10px;color:#6b7785;flex:none;line-height:1.5;">
+        <div>Generado: ${fmt(TODAY())}</div>
+        ${p&&p.kine?`<div>Kinesiólogo: ${esc(p.kine)}</div>`:""}
       </div>
     </div>
     ${bodyHTML}
-    <div style="margin-top:26px;padding-top:10px;border-top:1px solid #e4e8ee;font-size:10px;color:#6b7785;">
-      Generado el ${fmt(TODAY())} — Departamento de Kinesiología, Racing Club.
+    <div style="margin-top:28px;padding-top:10px;border-top:1px solid #e4e8ee;font-size:10px;color:#6b7785;text-align:center;">
+      Documento interno — Departamento de Kinesiología, Racing Club.
     </div>
   </div>`;
 }
 function pdfRow(label,val){
   if(val===undefined||val===null||val==="") return "";
   return `<div style="display:flex;font-size:12px;padding:5px 0;border-bottom:1px solid #f0f2f5;">
-    <div style="min-width:150px;font-weight:700;color:#6b7785;">${esc(label)}</div>
+    <div style="min-width:160px;font-weight:700;color:#6b7785;">${esc(label)}</div>
     <div style="flex:1">${esc(val)}</div></div>`;
 }
 function pdfSectionTitle(t){
   return `<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;
-    color:#002048;margin:18px 0 8px;border-bottom:1px solid #e4e8ee;padding-bottom:4px;">${esc(t)}</div>`;
+    color:#002048;margin:20px 0 9px;border-bottom:1px solid #e4e8ee;padding-bottom:5px;
+    page-break-after:avoid;break-after:avoid;">${esc(t)}</div>`;
 }
 function pdfTags(arr){
   return arr.filter(Boolean).map(t=>
     `<span style="font-size:10px;background:#eaf6fb;color:#0a557a;border-radius:5px;
       padding:2px 8px;font-weight:600;margin-right:5px;display:inline-block;margin-bottom:4px;">${esc(t)}</span>`).join("");
+}
+function pdfMetricCards(items){
+  const use = items.filter(i=> i.value!==null && i.value!==undefined && i.value!=="");
+  if(!use.length) return "";
+  return `<div style="display:flex;gap:10px;margin:14px 0 4px;flex-wrap:wrap;
+      page-break-inside:avoid;break-inside:avoid;">
+    ${use.map(i=>`<div style="flex:1;min-width:118px;background:#f7f9fb;border:1px solid #e4e8ee;
+        border-radius:8px;padding:10px 12px;">
+      <div style="font-size:19px;font-weight:800;color:${i.color||"#002048"};line-height:1;">${esc(i.value)}</div>
+      <div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:#6b7785;
+        margin-top:4px;font-weight:700;">${esc(i.label)}</div>
+    </div>`).join("")}
+  </div>`;
 }
 function pdfSessionBlock(l){
   const isEval = l.tipoRegistro==="evaluacion";
@@ -871,15 +891,17 @@ function pdfSessionBlock(l){
        (l.eva!==""&&l.eva!=null)?`EVA ${l.eva}`:null];
   let body="";
   if(isEval){
-    if(l.mediciones) body+=`<div style="font-size:12px;margin-top:6px;line-height:1.4;">${esc(l.mediciones)}</div>`;
+    if(l.mediciones) body+=`<div style="font-size:12px;margin-top:6px;line-height:1.45;">${esc(l.mediciones)}</div>`;
     if(l.observaciones) body+=`<div style="font-size:12px;margin-top:4px;color:#6b7785;"><b>Obs.:</b> ${esc(l.observaciones)}</div>`;
     if(l.proxEval) body+=`<div style="font-size:12px;margin-top:4px;color:#6b7785;"><b>Próxima eval.:</b> ${fmt(l.proxEval)}</div>`;
   }else{
-    if(l.contenido) body+=`<div style="font-size:12px;margin-top:6px;line-height:1.4;">${esc(l.contenido)}</div>`;
+    if(l.contenido) body+=`<div style="font-size:12px;margin-top:6px;line-height:1.45;">${esc(l.contenido)}</div>`;
     if(l.observaciones) body+=`<div style="font-size:12px;margin-top:4px;color:#6b7785;"><b>Obs.:</b> ${esc(l.observaciones)}</div>`;
     if(l.proximos) body+=`<div style="font-size:12px;margin-top:4px;color:#6b7785;"><b>Próximo:</b> ${esc(l.proximos)}</div>`;
   }
-  return `<div style="margin-bottom:10px;padding:9px 12px;background:#f7f9fb;border-radius:8px;border:1px solid #e4e8ee;">
+  return `<div style="margin-bottom:10px;padding:10px 13px;background:#f7f9fb;border-radius:8px;
+      border:1px solid #e4e8ee;border-left:3px solid ${isEval?"#1d9e75":"#0098d8"};
+      page-break-inside:avoid;break-inside:avoid;">
     <div style="font-size:12px;color:#6b7785;">
       <b style="color:#002048;">${fmt(l.fecha)}</b>
       &nbsp;· ${isEval?"Evaluación":"Entrenamiento"}
@@ -891,23 +913,48 @@ function pdfSessionBlock(l){
 }
 function downloadPDF(html, filename){
   const holder=document.createElement("div");
-  holder.style.position="fixed"; holder.style.left="0"; holder.style.top="0";
-  holder.style.zIndex="-1"; holder.style.opacity="0"; holder.style.pointerEvents="none";
+  holder.style.position="fixed"; holder.style.left="-99999px"; holder.style.top="0";
+  holder.style.zIndex="-1"; holder.style.background="#fff";
   holder.innerHTML=html;
   document.body.appendChild(holder);
+  toast("Generando PDF…");
   html2pdf().from(holder).set({
-    margin:10,
+    margin:[14,10,18,10],
     filename,
-    html2canvas:{scale:2, scrollX:0, scrollY:0},
-    jsPDF:{unit:"mm",format:"a4",orientation:"portrait"}
-  }).save().then(()=>holder.remove()).catch(()=>holder.remove());
+    html2canvas:{scale:2, scrollX:0, scrollY:0, windowWidth:holder.scrollWidth, windowHeight:holder.scrollHeight},
+    jsPDF:{unit:"mm",format:"a4",orientation:"portrait"},
+    pagebreak:{mode:["avoid-all","css","legacy"]}
+  }).toPdf().get('pdf').then(pdf=>{
+    const pages = pdf.internal.getNumberOfPages();
+    const w = pdf.internal.pageSize.getWidth(), h = pdf.internal.pageSize.getHeight();
+    for(let i=1;i<=pages;i++){
+      pdf.setPage(i);
+      pdf.setFontSize(8); pdf.setTextColor(150);
+      pdf.text(`Racing Club · Kinesiología  —  Página ${i} de ${pages}`, w/2, h-7, {align:"center"});
+    }
+  }).save().then(()=>{ holder.remove(); toast("PDF descargado"); })
+    .catch(()=>{ holder.remove(); toast("No se pudo generar el PDF"); });
 }
 function exportPlayerPDF(id){
   const p = state.players.find(x=>x.id===id); if(!p) return;
-  let body = `<div><span style="display:inline-block;font-size:11px;font-weight:700;border-radius:20px;
-    padding:3px 12px;color:#fff;background:${ESTADO_HEX[p.estado]||"#6b7785"};">
-    ${esc(p.estado)}</span></div>
-  <div style="font-size:13px;color:#6b7785;margin-top:6px;">${esc(p.dx||"Sin diagnóstico cargado")}</div>`;
+  const cl = currentLSI(p);
+  const start = p.fechaCirugia||p.fechaLesion;
+  const dPost = start ? daysBetween(start,TODAY()) : null;
+  const total = (p.bitacora||[]).length;
+
+  let body = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+    <span style="display:inline-block;font-size:11px;font-weight:700;border-radius:20px;
+      padding:3px 12px;color:#fff;background:${ESTADO_HEX[p.estado]||"#6b7785"};">${esc(p.estado)}</span>
+  </div>
+  <div style="font-size:13px;color:#6b7785;">${esc(p.dx||"Sin diagnóstico cargado")}</div>`;
+
+  body += pdfMetricCards([
+    {label: dPost!=null? `Días post-${p.fechaCirugia?"cirugía":"lesión"}` : "Días post-lesión", value: dPost, color:"#0098d8"},
+    {label:"LSI actual", value: cl!=null? cl+"%":null, color:"#1d9e75"},
+    {label:"RTP estimado", value: p.rtp? fmt(p.rtp):null, color:"#002048"},
+    {label:"Próx. reevaluación", value: p.proxEval? fmt(p.proxEval):null, color:"#ef9f27"},
+    {label:"Sesiones registradas", value: total, color:"#378add"},
+  ]);
 
   body += pdfSectionTitle("Datos generales");
   body += pdfRow("Posición",p.posicion);
@@ -915,25 +962,32 @@ function exportPlayerPDF(id){
   body += pdfRow("Fecha lesión", p.fechaLesion?fmt(p.fechaLesion):"");
   body += pdfRow("Fecha cirugía", p.fechaCirugia?fmt(p.fechaCirugia):"");
   body += pdfRow("Técnica",p.tecnica);
-  body += pdfRow("Kinesiólogo",p.kine);
-  body += pdfRow("RTP estimado", p.rtp?fmt(p.rtp):"");
-  const cl = currentLSI(p);
-  body += pdfRow("LSI actual", cl!=null? cl+"%":"");
-  body += pdfRow("Próxima re-evaluación", p.proxEval?fmt(p.proxEval):"");
+  body += pdfRow("Kinesiólogo responsable",p.kine);
   if(p.notas) body += pdfRow("Notas",p.notas);
 
   const al = computeAlerts(p);
   if(al.length){
-    body += pdfSectionTitle("Alertas");
-    body += al.map(a=>`<div style="font-size:12px;padding:3px 0;">• ${esc(a.txt)}</div>`).join("");
+    body += pdfSectionTitle("Alertas activas");
+    body += `<div style="background:#fff7ec;border:1px solid #f3dcae;border-radius:8px;padding:9px 13px;
+        page-break-inside:avoid;break-inside:avoid;">
+      ${al.map(a=>`<div style="font-size:12px;padding:3px 0;">• ${esc(a.txt)}</div>`).join("")}
+    </div>`;
   }
 
+  if(start){
+    body += pdfSectionTitle("Seguimiento RTP");
+    body += `<div style="page-break-inside:avoid;break-inside:avoid;">${rtpHTML(p)}</div>`;
+  }
+
+  body += pdfSectionTitle("Evolución clínica");
+  body += chartsHTML(p);
+
   const sorted = (p.bitacora||[]).slice().sort((a,b)=>(b.fecha||"").localeCompare(a.fecha||""));
-  body += pdfSectionTitle(`Historial (${sorted.length} registro${sorted.length===1?"":"s"})`);
+  body += pdfSectionTitle(`Historial completo (${sorted.length} registro${sorted.length===1?"":"s"})`);
   body += sorted.length ? sorted.map(pdfSessionBlock).join("")
     : `<div style="font-size:12px;color:#6b7785;">Sin registros.</div>`;
 
-  downloadPDF(pdfShell(p.nombre, "Ficha de seguimiento kinesiológico", body), `ficha_${slug(p.nombre)}.pdf`);
+  downloadPDF(pdfShell(p.nombre, "Informe de seguimiento kinesiológico", body, p), `informe_${slug(p.nombre)}.pdf`);
 }
 function exportSessionPDF(pid,lid){
   const p = state.players.find(x=>x.id===pid); if(!p) return;
@@ -941,7 +995,7 @@ function exportSessionPDF(pid,lid){
   const isEval = l.tipoRegistro==="evaluacion";
   const body = pdfSessionBlock(l);
   downloadPDF(
-    pdfShell(p.nombre, `${isEval?"Evaluación":"Entrenamiento"} · ${fmt(l.fecha)}`, body),
+    pdfShell(p.nombre, `${isEval?"Evaluación":"Entrenamiento"} · ${fmt(l.fecha)}`, body, p),
     `${isEval?"evaluacion":"entrenamiento"}_${slug(p.nombre)}_${l.fecha||TODAY()}.pdf`
   );
 }
